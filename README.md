@@ -1,33 +1,86 @@
-# AeroBeat Tool Headless Manager
+# AeroBeat Headless Manager
 
-This repo is the early bootstrap for the reusable **AeroBeat headless-manager** tool. It currently retains the upstream Tool-template skeleton while the first narrow headless quit design is being defined.
+This repo provides a tiny reusable **AeroBeat headless-manager** singleton/autoload for Godot projects.
 
-Template baseline context still applies:
+Its v1 contract is intentionally narrow and development-only:
 
-It should be read against the locked product direction from `aerobeat-docs`:
+- it only arms during **debug headless** runtime sessions
+- it watches exactly one project-local sentinel path: `res://.headless/quit.request`
+- it resolves that path with `ProjectSettings.globalize_path("res://.headless/quit.request")`
+- on headless startup it ensures `.headless/` exists, clears any stale `quit.request`, and then starts polling for the sentinel
+- when the sentinel appears, it consumes/deletes the file and calls `get_tree().quit()` from inside the app
 
-- **Primary release target:** PC community first
-- **Official v1 gameplay features:** Boxing and Flow
-- **Official v1 gameplay input:** camera only
-- **Tool stance:** tools should stay workflow-oriented and gameplay-mode agnostic enough to support the current product slice without implying equal-status future gameplay/input/platform scope
-- **Tool lane ownership:** shared tool-side DTOs, progress/result models, and workflow interfaces belong in `aerobeat-tool-core`; concrete authoring/import/export/validation tooling belongs in specific `aerobeat-tool-*` repos
+The mere presence of the file means **quit now**. No token. No command payload. No PID kills. No sidecar kills.
 
-## Current bootstrap status
+## What this is for
 
-- **Repo state:** cloned and wired to the GitHub SSH remote `git@github.com:AeroBeat-Workouts/aerobeat-tool-headless-manager.git`
-- **Current skeleton:** still the initial Tool-template bootstrap (`src/AeroToolManager.gd`, `.testbed/`, template metadata/tests)
-- **Implementation status:** no headless quit mechanism is implemented yet
-- **Design note:** see `docs/headless-quit-design.md` for the recommended minimal v1 control surface and caveats
+This package exists to give AeroBeat-style headless development runs a tiny in-engine quit request path that is easier to audit than external process termination. It keeps the control surface local, file-based, and deliberately boring.
 
-## 📋 Repository Details
+## What this is not
 
-- **Type:** Tool template
-- **License:** **Mozilla Public License 2.0 (MPL 2.0)**
-- **Dependency contract:**
-  - `aerobeat-tool-core` — required shared tool/workflow contract
-  - additional adjacent lane/core repos only when the specific tool actually consumes them (commonly `aerobeat-content-core` or `aerobeat-asset-core`)
+This is **not** a general remote-control API.
 
-## GodotEnv development flow
+It does **not**:
+
+- expose HTTP or socket control
+- parse commands or payload files
+- claim equivalence to the Godot editor's Stop Running Project behavior
+- prove that every sidecar/helper shutdown bug is solved
+- replace the normal editor stop workflow for interactive development
+
+The truthful claim is narrower: for approved headless development runs, this package provides a small app-side quit path that may be safer than external termination because the quit happens from inside the Godot process.
+
+## Package layout
+
+- `src/AeroHeadlessManager.gd` — the singleton/autoload implementation
+- `plugin.cfg` — package metadata
+- `.testbed/` — hidden workbench used for repo-local import/tests
+- `docs/headless-quit-design.md` — design note and caveats
+
+## Consumer setup via GodotEnv
+
+Install this repo into the consuming project through GodotEnv just like any other package. The exact checkout/pin belongs in the consumer's `addons.jsonc`, but the mounted addon key should stay truthful so the autoload path is stable, for example:
+
+```jsonc
+{
+  "addons": {
+    "aerobeat-tool-headless-manager": {
+      "url": "git@github.com:AeroBeat-Workouts/aerobeat-tool-headless-manager.git",
+      "checkout": "main",
+      "subfolder": "/"
+    }
+  }
+}
+```
+
+Then add the autoload to the consuming project's `project.godot`:
+
+```ini
+[autoload]
+AeroHeadlessManager="*res://addons/aerobeat-tool-headless-manager/src/AeroHeadlessManager.gd"
+```
+
+Also add the project-local sentinel folder to the consumer repo's `.gitignore`:
+
+```gitignore
+.headless/
+```
+
+## Sending a quit request
+
+From the host shell, create the sentinel file at the consuming project's project-local path. Atomic rename is preferred so the manager only sees a completed file:
+
+```bash
+QUIT_FILE="/path/to/project/.headless/quit.request"
+TMP_FILE="$QUIT_FILE.tmp.$$"
+mkdir -p "$(dirname "$QUIT_FILE")"
+: > "$TMP_FILE"
+mv "$TMP_FILE" "$QUIT_FILE"
+```
+
+That is the whole control surface.
+
+## Repo-local development flow
 
 This repo uses the AeroBeat GodotEnv package convention.
 
@@ -36,8 +89,6 @@ This repo uses the AeroBeat GodotEnv package convention.
 - GodotEnv cache: `.testbed/.addons/`
 - Hidden workbench project: `.testbed/project.godot`
 - Repo-local unit tests: `.testbed/tests/`
-
-The repo root remains the package/published boundary for downstream consumers. Day-to-day development, debugging, and validation happen from the hidden `.testbed/` workbench using the pinned OpenClaw toolchain: Godot `4.6.2 stable standard`.
 
 ### Restore dev/test dependencies
 
@@ -48,17 +99,7 @@ cd .testbed
 godotenv addons install
 ```
 
-That restores this repo's current dev/test manifest into `.testbed/addons/`. Canonically, Tool templates should keep the baseline manifest narrow: `aerobeat-tool-core` plus test-only tooling.
-
-### Open the workbench
-
-From the repo root:
-
-```bash
-godot --editor --path .testbed
-```
-
-Use this `.testbed/` project as the canonical direct-development and bugfinding surface for tool-template work.
+The hidden workbench installs this repo into `.testbed/addons/aerobeat-tool-headless-manager/` via a local symlink so the testbed exercises the same mounted-addon path a consumer would use.
 
 ### Import smoke check
 
@@ -78,12 +119,3 @@ godot --headless --path .testbed --script addons/gut/gut_cmdln.gd \
   -ginclude_subdirs \
   -gexit
 ```
-
-### Validation notes
-
-- `.testbed/addons.jsonc` is the committed dev/test dependency contract.
-- The canonical template manifest for this repo is `aerobeat-tool-core` + `gut`.
-- `aerobeat-tool-core` is currently pinned to `main` intentionally because the repo does not yet have release tags; switch to a tag once tagged releases exist.
-- If a concrete tool needs adjacent lane repos, add them intentionally rather than restoring a universal `aerobeat-core` baseline.
-- Repo-local unit tests live under `.testbed/tests/` and currently validate repo metadata plus the template stub contract.
-- The current package shape is consumed from the repo root (`subfolder: "/"`) for downstream installs.

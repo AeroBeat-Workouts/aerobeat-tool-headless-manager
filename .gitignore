@@ -19,6 +19,10 @@ Thumbs.db
 .testbed/addons/*
 !.testbed/addons/.editorconfig
 .testbed/.addons/
+.testbed/.headless/
+
+# Project-local headless sentinel folder
+.headless/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

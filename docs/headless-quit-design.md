@@ -10,6 +10,8 @@ It should **not** claim equivalence to the Godot editor's **Stop Running Project
 
 Use a **headless-only, one-shot sentinel file command** handled by a reusable autoload/singleton.
 
+Update after review: keep v1 development-only and remove both the token/handshake concept and command payload parsing. The external command surface should be as simple as possible: one watched file, `res://.headless/quit.request`, whose mere presence means "quit now".
+
 ### Why this is the smallest truthful control surface
 
 - smaller than embedding a general HTTP API or long-lived socket server
@@ -25,9 +27,9 @@ Suggested singleton name: `AeroHeadlessManager`
 Suggested responsibilities for v1 only:
 
 - stay disabled unless explicitly configured for a headless run
-- watch exactly one configured sentinel file path
-- accept exactly one command form: `QUIT <token>`
-- on a valid request, delete/consume the sentinel, emit a local signal for observability, and call `get_tree().quit()` from inside the app
+- resolve and watch exactly one project-local sentinel path: `res://.headless/quit.request`
+- clear/remove any pre-existing sentinel on startup before arming the watcher
+- when the sentinel appears, delete/consume it, emit a local signal for observability, and call `get_tree().quit()` from inside the app
 - ignore everything else
 
 Suggested non-responsibilities for v1:
@@ -41,31 +43,32 @@ Suggested non-responsibilities for v1:
 
 ## Suggested runtime configuration
 
-Keep configuration explicit and per-run, for example via environment variables or launch arguments supplied by the harness:
+Use a fixed project-local path so launching subagents do not need per-run configuration:
 
-- `AEROBEAT_HEADLESS_QUIT_FILE=/tmp/aerobeat-headless/<run-id>/quit.request`
-- `AEROBEAT_HEADLESS_QUIT_TOKEN=<random-per-run-token>`
+- `res://.headless/quit.request`
+- filesystem path resolved at runtime with `ProjectSettings.globalize_path("res://.headless/quit.request")`
 
 Guardrails:
 
 - only arm the manager when running in headless automation mode
-- require an absolute path
-- require a per-run random token so stale files from older runs are rejected
+- ensure `.headless/` exists inside the project when needed
 - treat the sentinel as one-shot; once consumed, the manager should not accept further commands
+- consume/remove any pre-existing sentinel at startup so stale dev files do not immediately trigger quit
+- add `.headless/` to the consuming dev project's `.gitignore`
 
 ## Exact allowed subagent interaction
 
-The allowed external interaction should be a single host-shell write of the exact quit command into the configured sentinel file, ideally via atomic rename to avoid partial reads:
+The allowed external interaction should be a single host-shell creation of the sentinel file at the project-local path, ideally via atomic rename so the manager only ever sees a completed file:
 
 ```bash
-RUN_DIR=/tmp/aerobeat-headless/$RUN_ID
-QUIT_FILE="$RUN_DIR/quit.request"
+QUIT_FILE="/path/to/project/.headless/quit.request"
 TMP_FILE="$QUIT_FILE.tmp.$$"
-printf 'QUIT %s\n' "$AEROBEAT_HEADLESS_QUIT_TOKEN" > "$TMP_FILE"
+mkdir -p "$(dirname "$QUIT_FILE")"
+: > "$TMP_FILE"
 mv "$TMP_FILE" "$QUIT_FILE"
 ```
 
-That is the whole control surface. No PID kill, no sidecar kill, no directory-wide command inbox.
+That is the whole control surface. No PID kill, no sidecar kill, no command payload, no directory-wide command inbox.
 
 ## Why this is safer than PID/sidecar kills
 
