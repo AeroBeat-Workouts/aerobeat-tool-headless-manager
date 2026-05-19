@@ -1,6 +1,8 @@
-# AeroBeat Tool Template
+# AeroBeat Tool Headless Manager
 
-This is the official template for creating **Tool** repositories within the current AeroBeat v1 architecture.
+This repo is the early bootstrap for the reusable **AeroBeat headless-manager** tool. It currently retains the upstream Tool-template skeleton while the first narrow headless quit design is being defined.
+
+Template baseline context still applies:
 
 It should be read against the locked product direction from `aerobeat-docs`:
 
@@ -9,6 +11,13 @@ It should be read against the locked product direction from `aerobeat-docs`:
 - **Official v1 gameplay input:** camera only
 - **Tool stance:** tools should stay workflow-oriented and gameplay-mode agnostic enough to support the current product slice without implying equal-status future gameplay/input/platform scope
 - **Tool lane ownership:** shared tool-side DTOs, progress/result models, and workflow interfaces belong in `aerobeat-tool-core`; concrete authoring/import/export/validation tooling belongs in specific `aerobeat-tool-*` repos
+
+## Current bootstrap status
+
+- **Repo state:** cloned and wired to the GitHub SSH remote `git@github.com:AeroBeat-Workouts/aerobeat-tool-headless-manager.git`
+- **Current skeleton:** still the initial Tool-template bootstrap (`src/AeroToolManager.gd`, `.testbed/`, template metadata/tests)
+- **Implementation status:** no headless quit mechanism is implemented yet
+- **Design note:** see `docs/headless-quit-design.md` for the recommended minimal v1 control surface and caveats
 
 ## 📋 Repository Details
 
